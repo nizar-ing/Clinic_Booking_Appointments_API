@@ -3,6 +3,9 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 
+const notFoundMiddleware = require('./middlewares/notFound.middleware');
+const errorMiddleware = require('./middlewares/error.middleware');
+
 const app = express();
 
 // Middlewares
@@ -19,5 +22,9 @@ app.get('/api/health', (req, res) => {
         message: "API is healthy"
     });
 })
+
+// Error Handling
+app.use(notFoundMiddleware);
+app.use(errorMiddleware);
 
 module.exports = app;
