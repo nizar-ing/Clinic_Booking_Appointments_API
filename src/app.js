@@ -4,8 +4,9 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 
 const authRoutes = require('./modules/auth/auth.routes');
-const doctorRoutes = require('./modules/doctors/doctors.routes');
+const doctorsRoutes = require('./modules/doctors/doctors.routes');
 const servicesRoutes = require('./modules/clinic-services/services.routes');
+const slotsRoutes = require('./modules/time-slots/slots.routes')
 
 const notFoundMiddleware = require('./middlewares/notFound.middleware');
 const errorMiddleware = require('./middlewares/error.middleware');
@@ -20,9 +21,9 @@ app.use(express.json());
 
 // Routes Middlewares
 app.use('/api/auth', authRoutes);
-app.use('/api/doctors', doctorRoutes);
+app.use('/api/doctors', doctorsRoutes);
 app.use('/api/clinic-services', servicesRoutes);
-
+app.use('/api/doctors/:doctorId/time-slots', slotsRoutes);
 
 // Routes
 app.get('/api/health', (req, res) => {
