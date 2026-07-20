@@ -4,6 +4,8 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 
 const authRoutes = require('./modules/auth/auth.routes');
+const doctorRoutes = require('./modules/doctors/doctors.routes');
+const servicesRoutes = require('./modules/clinic-services/services.routes');
 
 const notFoundMiddleware = require('./middlewares/notFound.middleware');
 const errorMiddleware = require('./middlewares/error.middleware');
@@ -16,7 +18,10 @@ app.use(helmet());
 app.use(morgan('dev'));
 app.use(express.json());
 
+// Routes Middlewares
 app.use('/api/auth', authRoutes);
+app.use('/api/doctors', doctorRoutes);
+app.use('/api/clinic-services', servicesRoutes);
 
 
 // Routes
