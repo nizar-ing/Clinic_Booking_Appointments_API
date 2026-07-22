@@ -1,60 +1,153 @@
-// Router is Express's mini-application for grouping related routes. It lets us
-// define route handlers in isolation and then mount them in app.js under a
-// common path prefix (/api/doctors/:doctorId/time-slots).
 const { Router } = require('express');
 
-// Import the three controller functions that handle the HTTP request/response cycle.
 const slotController = require('./slots.controller');
-
-// Middleware: validates Zod schema against req.body and replaces it with the
-// parsed output (or calls next(AppError) on failure).
 const validate = require('../../middlewares/validate.middleware');
-
-// Middleware: verifies the JWT Bearer token and attaches { id, name, email, role }
-// to req.user. Returns 401 if the token is missing, invalid, or expired.
 const authenticate = require('../../middlewares/auth.middleware');
-
-// Middleware factory: call authorize('ADMIN') to produce a middleware that returns
-// 403 if req.user.role is not 'ADMIN'. Must be used after authenticate.
 const authorize = require('../../middlewares/role.middleware');
-
-// The Zod schema that defines and validates the shape of the POST request body
-// (date, startTime, endTime — with working-hours and no-past-date rules).
 const { createSlotSchema } = require('./slots.validation');
 
-// mergeParams: true — critical option for nested routers.
-// Without it, params defined in the parent route (:doctorId from
-// /api/doctors/:doctorId/time-slots) would be invisible inside this router.
-// With mergeParams, req.params.doctorId is accessible in every handler below.
+// mergeParams: true exposes :doctorId from the parent /api/doctors/:doctorId route.
 const router = Router({ mergeParams: true });
 
-
-// POST /api/doctors/:doctorId/time-slots
-// Middleware chain runs left-to-right before the controller:
-//   1. authenticate — ensures the caller is a logged-in user (401 if not)
-//   2. authorize('ADMIN') — ensures that user is an admin (403 if not)
-//   3. validate(createSlotSchema) — validates & coerces req.body against the
-//      Zod schema; short-circuits with 400 if validation fails
-// The array syntax is equivalent to listing the middleware as separate arguments;
-// Express processes all entries in order.
+/**
+ * @openapi
+ * /api/doctors/{doctorId}/time-slots:
+ *   post:
+ *     tags: [Slots]
+ *     summary: Create a time slot for a doctor (Admin only)
+ *     description: |
+ *       Slots must fall within working hours (08:00–18:00), cannot be dated in the past,
+ *       and must not overlap with an existing slot for the same doctor.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: doctorId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: Doctor UUID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [date, startTime, endTime]
+ *             properties:
+ *               date:
+ *                 type: string
+ *                 format: date
+ *                 example: '2026-08-15'
+ *               startTime:
+ *                 type: string
+ *                 pattern: '^\d{2}:\d{2}$'
+ *                 example: '09:00'
+ *               endTime:
+ *                 type: string
+ *                 pattern: '^\d{2}:\d{2}$'
+ *                 example: '09:30'
+ *     responses:
+ *       201:
+ *         description: Slot created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Slot created successfully.
+ *                 data:
+ *                   $ref: '#/components/schemas/DoctorSlot'
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       409:
+ *         $ref: '#/components/responses/Conflict'
+ */
 router.post(
     '/',
     [authenticate, authorize('ADMIN'), validate(createSlotSchema)],
     slotController.createSlot
 );
 
-// GET /api/doctors/:doctorId/time-slots
-// Public route — no authentication required. Returns all slots (booked + unbooked)
-// for the specified doctor, ordered by date then startTime.
+/**
+ * @openapi
+ * /api/doctors/{doctorId}/time-slots:
+ *   get:
+ *     tags: [Slots]
+ *     summary: List all time slots for a doctor
+ *     description: Returns both booked and available slots, ordered by date then start time.
+ *     parameters:
+ *       - in: path
+ *         name: doctorId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: Doctor UUID
+ *     responses:
+ *       200:
+ *         description: All slots for the doctor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 count:
+ *                   type: integer
+ *                   example: 12
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/DoctorSlot'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ */
 router.get('/', slotController.getDoctorSlots);
 
-// GET /api/doctors/:doctorId/time-slots/available
-// Public route — no authentication required. Returns only future, unbooked slots
-// so patients can see what they can actually book.
-// NOTE: This route must be declared before any parameterised GET (e.g. /:id)
-// to prevent Express from treating the literal string "available" as a param value.
+/**
+ * @openapi
+ * /api/doctors/{doctorId}/time-slots/available:
+ *   get:
+ *     tags: [Slots]
+ *     summary: List available (unbooked, future) time slots for a doctor
+ *     parameters:
+ *       - in: path
+ *         name: doctorId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: Doctor UUID
+ *     responses:
+ *       200:
+ *         description: Future unbooked slots
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 count:
+ *                   type: integer
+ *                   example: 7
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/DoctorSlot'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ */
 router.get('/available', slotController.getAvailableSlots);
 
-// Export the configured router so app.js can mount it:
-//   app.use('/api/doctors/:doctorId/time-slots', slotsRouter)
 module.exports = router;
